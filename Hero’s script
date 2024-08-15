@@ -1,0 +1,276 @@
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+local isFollowing = false
+local targetPlayer = nil
+local DISTANCE_BELOW_TARGET = 7 -- Default distance to stay below the target player
+local ULT_EMERGENCY_DISTANCE_ABOVE = 100 -- Distance for Ult Emergency action above the player
+local isEmergency = false -- State for emergency follow
+local isPOVTargetOn = false -- State for POV Target
+
+-- Create Attach GUI
+local attachGui = Instance.new("ScreenGui")
+attachGui.Parent = game:GetService("CoreGui")
+
+local mainFrame = Instance.new("Frame")
+mainFrame.Size = UDim2.new(0, 200, 0, 315) -- Adjusted size to fit new buttons
+mainFrame.Position = UDim2.new(0.5, -100, 0.5, -150) -- Adjusted position to center
+mainFrame.BackgroundTransparency = 0.5
+mainFrame.BackgroundColor3 = Color3.new(0, 0, 0)
+mainFrame.Parent = attachGui
+
+local usernameTextBox = Instance.new("TextBox")
+usernameTextBox.Size = UDim2.new(1, 0, 0, 30)
+usernameTextBox.Position = UDim2.new(0, 0, 0, 10)
+usernameTextBox.PlaceholderText = "Enter Player Username"
+usernameTextBox.Parent = mainFrame
+
+local toggleButton = Instance.new("TextButton")
+toggleButton.Size = UDim2.new(1, 0, 0, 30)
+toggleButton.Position = UDim2.new(0, 0, 0, 50)
+toggleButton.Text = "Off"
+toggleButton.Parent = mainFrame
+
+-- Ult Emergency Button
+local ultEmergencyButton = Instance.new("TextButton")
+ultEmergencyButton.Size = UDim2.new(1, 0, 0, 30)
+ultEmergencyButton.Position = UDim2.new(0, 0, 0, 90)
+ultEmergencyButton.Text = "Ult Emergency"
+ultEmergencyButton.Parent = mainFrame
+
+-- Ult Emergency Toggle Button
+local ultEmergencyToggleButton = Instance.new("TextButton")
+ultEmergencyToggleButton.Size = UDim2.new(1, 0, 0, 30)
+ultEmergencyToggleButton.Position = UDim2.new(0, 0, 0, 130)
+ultEmergencyToggleButton.Text = "Off"
+ultEmergencyToggleButton.Parent = mainFrame
+
+-- Lowest Health Button
+local lowestHealthButton = Instance.new("TextButton")
+lowestHealthButton.Size = UDim2.new(1, 0, 0, 30)
+lowestHealthButton.Position = UDim2.new(0, 0, 0, 170)
+lowestHealthButton.Text = "Lowest Health: Off"
+lowestHealthButton.Parent = mainFrame
+
+-- POV Target Button
+local povTargetButton = Instance.new("TextButton")
+povTargetButton.Size = UDim2.new(1, 0, 0, 15) -- Half the size of the lowest health button
+povTargetButton.Position = UDim2.new(0, 0, 0, 210)
+povTargetButton.Text = "POV Target: Off"
+povTargetButton.Parent = mainFrame
+
+-- Hide/Open Button
+local hideButton = Instance.new("TextButton")
+hideButton.Size = UDim2.new(0, 100, 0, 30)
+hideButton.Position = UDim2.new(0, 10, 0, 10)
+hideButton.Text = "Hide"
+hideButton.Parent = attachGui
+
+local isLowestHealthOn = false
+local followLowestHealthTarget = nil
+local playerHealth = {}
+
+local function updatePlayerHealth()
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("Humanoid") then
+            local playerId = player.UserId
+            playerHealth[playerId] = player.Character.Humanoid.Health
+        end
+    end
+end
+
+local function findLowestHealthPlayer()
+    local lowestHealth = math.huge
+    local lowestHealthPlayer = nil
+    for playerId, health in pairs(playerHealth) do
+        local player = Players:GetPlayerByUserId(playerId)
+        if player and health < lowestHealth then
+            lowestHealth = health
+            lowestHealthPlayer = player
+        end
+    end
+    return lowestHealthPlayer
+end
+
+local function toggleGuiVisibility()
+    if mainFrame.Visible then
+        mainFrame.Visible = false
+        hideButton.Text = "Open"
+    else
+        mainFrame.Visible = true
+        hideButton.Text = "Hide"
+    end
+end
+
+hideButton.MouseButton1Click:Connect(toggleGuiVisibility)
+
+-- Player List Frame
+local playerListFrame = Instance.new("ScrollingFrame")
+playerListFrame.Size = UDim2.new(0, 200, 0, 150)
+playerListFrame.Position = UDim2.new(0.5, -100, 0.5, -75)
+playerListFrame.BackgroundTransparency = 0.5
+playerListFrame.BackgroundColor3 = Color3.new(0.1, 0.1, 0.1)
+playerListFrame.ScrollBarThickness = 10
+playerListFrame.Visible = false
+playerListFrame.Parent = attachGui
+
+local function updatePlayerList()
+    playerListFrame:ClearAllChildren()
+
+    local players = Players:GetPlayers()
+    for i, player in ipairs(players) do
+        local playerButton = Instance.new("TextButton")
+        playerButton.Size = UDim2.new(1, 0, 0, 30)
+        playerButton.Position = UDim2.new(0, 0, 0, (i - 1) * 30)
+        playerButton.Text = player.Name
+        playerButton.Parent = playerListFrame
+
+        playerButton.MouseButton1Click:Connect(function()
+            usernameTextBox.Text = player.Name
+            targetPlayer = player
+            playerListFrame.Visible = false
+            mainFrame.Visible = true
+        end)
+    end
+end
+
+usernameTextBox.Focused:Connect(function()
+    mainFrame.Visible = false
+    playerListFrame.Visible = true
+    updatePlayerList()
+end)
+
+-- Attach Functionality
+local function followPlayer(distanceBelow)
+    if targetPlayer and LocalPlayer.Character and targetPlayer.Character then
+        local targetPosition = targetPlayer.Character.PrimaryPart.Position
+        local localPosition = targetPosition - Vector3.new(0, distanceBelow, 0)
+        LocalPlayer.Character:SetPrimaryPartCFrame(CFrame.new(localPosition))
+
+        for _, part in pairs(LocalPlayer.Character:GetDescendants()) do
+            if part:IsA("BasePart") then
+                part.CanCollide = false
+            end
+        end
+    end
+end
+
+local function enableCollision()
+    if LocalPlayer.Character then
+        for _, part in pairs(LocalPlayer.Character:GetDescendants()) do
+            if part:IsA("BasePart") then
+                part.CanCollide = true
+            end
+        end
+    end
+end
+
+toggleButton.MouseButton1Click:Connect(function()
+    if toggleButton.Text == "Off" then
+        toggleButton.Text = "On"
+        local username = usernameTextBox.Text
+        targetPlayer = Players:FindFirstChild(username)
+        if targetPlayer then
+            isFollowing = true
+            isEmergency = false -- Ensure emergency is off
+            followPlayer(DISTANCE_BELOW_TARGET)
+        else
+            warn("Player with the given username not found.")
+        end
+    else
+        toggleButton.Text = "Off"
+        targetPlayer = nil
+        isFollowing = false
+        enableCollision()
+    end
+end)
+
+ultEmergencyToggleButton.MouseButton1Click:Connect(function()
+    if ultEmergencyToggleButton.Text == "Off" then
+        ultEmergencyToggleButton.Text = "On"
+        local username = usernameTextBox.Text
+        targetPlayer = Players:FindFirstChild(username)
+        if targetPlayer and LocalPlayer.Character and targetPlayer.Character then
+            isEmergency = true
+            isFollowing = true -- Ensure following is active
+        else
+            warn("Player with the given username not found or invalid character setup.")
+        end
+    else
+        ultEmergencyToggleButton.Text = "Off"
+        isEmergency = false
+        isFollowing = false -- Turn off following when emergency is off
+        enableCollision() -- Re-enable collision when not following
+    end
+end)
+
+lowestHealthButton.MouseButton1Click:Connect(function()
+    if isLowestHealthOn then
+        lowestHealthButton.Text = "Lowest Health: Off"
+        isLowestHealthOn = false
+        followLowestHealthTarget = nil
+        isPOVTargetOn = false -- Turn off POV Target if Lowest Health is off
+        povTargetButton.Text = "POV Target: Off"
+        -- Reset camera to default if POV Target was active
+        local camera = game.Workspace.CurrentCamera
+        camera.CameraSubject = LocalPlayer.Character.Humanoid
+        camera.CameraType = Enum.CameraType.Custom
+    else
+        lowestHealthButton.Text = "Lowest Health: On"
+        isLowestHealthOn = true
+    end
+end)
+
+povTargetButton.MouseButton1Click:Connect(function()
+    if isPOVTargetOn then
+        povTargetButton.Text = "POV Target: Off"
+        isPOVTargetOn = false
+        -- Reset camera to default
+        local camera = game.Workspace.CurrentCamera
+        camera.CameraSubject = LocalPlayer.Character.Humanoid
+        camera.CameraType = Enum.CameraType.Custom
+    else
+        if not isLowestHealthOn then
+            warn("POV Target only works when Lowest Health is on.")
+            return
+        end
+        povTargetButton.Text = "POV Target: On"
+        isPOVTargetOn = true
+    end
+end)
+
+game:GetService("RunService").RenderStepped:Connect(function()
+    updatePlayerHealth()
+
+    if isLowestHealthOn then
+        followLowestHealthTarget = findLowestHealthPlayer()
+        if followLowestHealthTarget and followLowestHealthTarget.Character and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+            local targetPosition = followLowestHealthTarget.Character:FindFirstChild("HumanoidRootPart").Position
+            local currentPosition = LocalPlayer.Character.HumanoidRootPart.Position
+            local newPosition = targetPosition + Vector3.new(0, -7, 0) -- Offset by 7 units below the target player
+            LocalPlayer.Character.HumanoidRootPart.CFrame = CFrame.new(newPosition)
+
+            if isPOVTargetOn and followLowestHealthTarget.Character:FindFirstChild("HumanoidRootPart") then
+                local camera = game.Workspace.CurrentCamera
+                camera.CameraSubject = followLowestHealthTarget.Character.Humanoid
+                camera.CameraType = Enum.CameraType.Attach
+            end
+        end
+    elseif isPOVTargetOn then
+        -- Ensure POV Target is off if Lowest Health is not on
+        povTargetButton.Text = "POV Target: Off"
+        isPOVTargetOn = false
+        local camera = game.Workspace.CurrentCamera
+        camera.CameraSubject = LocalPlayer.Character.Humanoid
+        camera.CameraType = Enum.CameraType.Custom
+    end
+
+    if isEmergency then
+        local targetPosition = targetPlayer.Character.PrimaryPart.Position
+        local localPosition = targetPosition + Vector3.new(0, ULT_EMERGENCY_DISTANCE_ABOVE, 0)
+        LocalPlayer.Character:SetPrimaryPartCFrame(CFrame.new(localPosition))
+    elseif isFollowing then
+        followPlayer(DISTANCE_BELOW_TARGET)
+    end
+end)
+
+print("GUI script loaded successfully.")
